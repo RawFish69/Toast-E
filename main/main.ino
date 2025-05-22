@@ -36,7 +36,7 @@ Author: RawFish69
 #define LEDC_RESOLUTION_BITS 10
 #define LEDC_RESOLUTION      ((1 << LEDC_RESOLUTION_BITS) - 1)
 #define LEDC_FREQUENCY       50
-#define CAMERA_SEND_FREQUENCY 5  // times per second
+#define CAMERA_SEND_FREQUENCY 10  // times per second
 
 Adafruit_AMG88xx amg;
 #define ROWS 8

@@ -43,6 +43,10 @@ static unsigned long lastSendTime = 0;
 #define COLS 8
 float thermalPixels[ROWS * COLS];
 
+#define UPSCALED_ROWS 64
+#define UPSCALED_COLS 64
+float upscaledPixels[UPSCALED_ROWS * UPSCALED_COLS];
+
 WebServer server(80);
 
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -170,13 +174,13 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
   }
 }
 
-// JSON endpoint for thermal data
+// JSON endpoint for raw thermal data
 void handleData() {
   String json = "[";
   for (int r = 0; r < ROWS; r++) {
     json += "[";
     for (int c = 0; c < COLS; c++) {
-      json += String(thermalPixels[r*COLS + c], 1);
+      json += String(thermalPixels[r * COLS + c], 1);
       if (c < COLS - 1) json += ',';
     }
     json += "]";
@@ -194,22 +198,64 @@ void handleRoot() {
                 "canvas{display:block;width:100vw;height:100vh;}</style></head><body>";
   html += "<div id='status'>Speed: <span id='speed'>0</span> Direction: <span id='dir'>N/A</span> Turn: <span id='turn'>0</span> Delivery: <span id='del'>-</span></div>";
   html += "<canvas id='canvas'></canvas>";
-  html += "<script>const rows=8,cols=8;const canvas=document.getElementById('canvas');const ctx=canvas.getContext('2d');"
+  html += "<script>"
+          "const rows=8,cols=8,upscaledRows=64,upscaledCols=64;"
+          "const canvas=document.getElementById('canvas');const ctx=canvas.getContext('2d');"
           "canvas.width=window.innerWidth;canvas.height=window.innerHeight;"
-          "function draw(){fetch('/data').then(r=>r.json()).then(d=>{"
-            "const w=canvas.width/cols,h=canvas.height/rows;"
-            "for(let i=0;i<rows;i++){for(let j=0;j<cols;j++){"
-              "let v=d[i][j],t=(v-20)/40;t=Math.max(0,Math.min(1,t));"
-              "ctx.fillStyle='rgb('+Math.floor(255*t)+',0,'+Math.floor(255*(1-t))+')';"
-              "ctx.fillRect(j*w,i*h,w,h);} }"
-          "});fetch('/status').then(r=>r.json()).then(s=>{"
-            "document.getElementById('speed').innerText=s.speed;"
-            "document.getElementById('dir').innerText=s.direction;"
-            "document.getElementById('turn').innerText=s.turn;"
-            "document.getElementById('del').innerText=s.delivery;"
-          "});}"
-          "setInterval(draw,200);window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;});"
-          "window.onload=draw;</script></body></html>";
+
+          // Jet colormap function
+          "function jetColorMap(value) {"
+            "const r = Math.max(0, Math.min(255, 255 * (1.5 - Math.abs(4 * value - 3))));"
+            "const g = Math.max(0, Math.min(255, 255 * (1.5 - Math.abs(4 * value - 2))));"
+            "const b = Math.max(0, Math.min(255, 255 * (1.5 - Math.abs(4 * value - 1))));"
+            "return `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;"
+          "}"
+
+          // Bilinear interpolation function
+          "function bilinearInterpolation(data, inputRows, inputCols, outputRows, outputCols) {"
+            "const result = new Array(outputRows * outputCols);"
+            "for (let r = 0; r < outputRows; r++) {"
+              "for (let c = 0; c < outputCols; c++) {"
+                "const srcR = r / (outputRows - 1) * (inputRows - 1);"
+                "const srcC = c / (outputCols - 1) * (inputCols - 1);"
+                "const r0 = Math.floor(srcR), r1 = Math.min(r0 + 1, inputRows - 1);"
+                "const c0 = Math.floor(srcC), c1 = Math.min(c0 + 1, inputCols - 1);"
+                "const dr = srcR - r0, dc = srcC - c0;"
+                "const top = data[r0 * inputCols + c0] * (1 - dc) + data[r0 * inputCols + c1] * dc;"
+                "const bottom = data[r1 * inputCols + c0] * (1 - dc) + data[r1 * inputCols + c1] * dc;"
+                "result[r * outputCols + c] = top * (1 - dr) + bottom * dr;"
+              "}"
+            "}"
+            "return result;"
+          "}"
+
+          "function draw(){"
+            "fetch('/data').then(r=>r.json()).then(d=>{"
+              "const rawData = d.flat();"
+              "const upscaledData = bilinearInterpolation(rawData, rows, cols, upscaledRows, upscaledCols);"
+              "const w=canvas.width/upscaledCols,h=canvas.height/upscaledRows;"
+              "for(let i=0;i<upscaledRows;i++){"
+                "for(let j=0;j<upscaledCols;j++){"
+                  "let v=upscaledData[i*upscaledCols+j];"
+                  "v = (v - 20) / 40; v = Math.max(0, Math.min(1, v));"  // Normalize to 0-1 range"
+                  "ctx.fillStyle = jetColorMap(v);"
+                  "ctx.fillRect(j*w,i*h,w,h);"
+                "}"
+              "}"
+            "});"
+            "fetch('/status').then(r=>r.json()).then(s=>{"
+              "document.getElementById('speed').innerText=s.speed;"
+              "document.getElementById('dir').innerText=s.direction;"
+              "document.getElementById('turn').innerText=s.turn;"
+              "document.getElementById('del').innerText=s.delivery;"
+            "});"
+          "}"
+
+          // Update interval to match 10 Hz (100 ms)
+          "setInterval(draw,100);"
+          "window.addEventListener('resize',()=>{canvas.width=window.innerWidth;canvas.height=window.innerHeight;});"
+          "window.onload=draw;"
+          "</script></body></html>";
   server.send(200, "text/html", html);
 }
 

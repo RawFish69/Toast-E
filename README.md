@@ -15,6 +15,15 @@ Toast-E is an ESP32-based thermal robot that combines wireless joystick control 
 
 ---
 
+## 🌟 Enhanced Display
+
+Web code uses bilinear interpolation to upscale the thermal imaging resolution from 8×8 to 64×64. This provides a smoother and more detailed visualization of the thermal data, making it easier to interpret heat patterns.
+
+![Enhanced Display](media/enhanced_display.jpg)  
+*Figure 3: Enhanced thermal display with upscaled resolution.*
+
+---
+
 ## 🔧 Features
 
 ### **Wireless Control**
@@ -24,8 +33,9 @@ Toast-E is an ESP32-based thermal robot that combines wireless joystick control 
 
 ### **Thermal Sensing & Visualization**
 - **AMG8833 Sensor**: 8×8 thermal array for heat detection.
+- **Enhanced Display**: Upscaled 64×64 thermal visualization using bilinear interpolation.
 - **Live Streaming**: Thermal data streamed at up to 10 Hz.
-- **Web-Based UI**: view the heatmap directly in a browser.
+- **Web-Based UI**: View the heatmap directly in a browser.
 
 ### **Modular Firmware**
 - **Controller**: Handles joystick input, web server, and ESP-NOW communication (`controller/controller.ino`).
